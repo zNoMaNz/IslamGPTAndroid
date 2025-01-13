@@ -9,6 +9,7 @@ from flask_jwt_extended import (
     jwt_required,
     get_jwt_identity,
 )
+from werkzeug.security import generate_password_hash, check_password_hash
 import openai
 
 # Initialize Flask app
@@ -16,7 +17,6 @@ app = Flask(__name__)
 CORS(app)  # Enable CORS
 
 # Load the JWT_SECRET_KEY from environment variables
-# Raise an error if the key is missing to avoid security risks
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
 if not app.config["JWT_SECRET_KEY"]:
     raise RuntimeError("JWT_SECRET_KEY is not set in environment variables!")
@@ -24,10 +24,12 @@ if not app.config["JWT_SECRET_KEY"]:
 # Initialize the JWT Manager
 jwt = JWTManager(app)
 
-openai.api_key = os.getenv("OPENAI_API_KEY")  # Use environment variable for security
+# OpenAI API key from environment variables
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Store threads and messages in memory (use a database for persistence)
-user_threads = {}
+# Simulated in-memory database (replace with actual database for production)
+users = {}  # Store users: {username: {password: hashed_password}}
+user_threads = {}  # Store threads: {thread_id: {"user": username, "messages": []}}
 
 # Ensure logs directory exists
 os.makedirs("logs", exist_ok=True)
@@ -36,6 +38,29 @@ os.makedirs("logs", exist_ok=True)
 # ---------------------
 # Authentication Routes
 # ---------------------
+
+@app.route("/register", methods=["POST"])
+def register():
+    """
+    Register a new user.
+    """
+    data = request.get_json()
+    username = data.get("username")
+    password = data.get("password")
+
+    if not username or not password:
+        return jsonify({"error": "Username and password are required"}), 400
+
+    if username in users:
+        return jsonify({"error": "Username already exists"}), 409
+
+    # Hash the password for secure storage
+    hashed_password = generate_password_hash(password)
+    users[username] = {"password": hashed_password}
+
+    return jsonify({"message": "User registered successfully"}), 201
+
+
 @app.route("/login", methods=["POST"])
 def login():
     """
@@ -45,16 +70,20 @@ def login():
     username = data.get("username")
     password = data.get("password")
 
-    # Dummy credentials (replace with your logic)
-    if username == "user" and password == "pass":
-        token = create_access_token(identity=username)
-        return jsonify({"token": token})
-    return jsonify({"error": "Invalid credentials"}), 401
+    # Validate username and password
+    user = users.get(username)
+    if not user or not check_password_hash(user["password"], password):
+        return jsonify({"error": "Invalid credentials"}), 401
+
+    # Generate a JWT token
+    token = create_access_token(identity=username)
+    return jsonify({"token": token})
 
 
 # ---------------------
 # Thread Management Routes
 # ---------------------
+
 @app.route("/thread", methods=["POST"])
 @jwt_required()
 def create_thread():
@@ -81,6 +110,7 @@ def get_threads():
 # ---------------------
 # Chat Routes
 # ---------------------
+
 @app.route("/ask", methods=["POST"])
 @jwt_required()
 def ask():
@@ -121,6 +151,7 @@ def ask():
 # ---------------------
 # Utility Routes
 # ---------------------
+
 @app.route("/health", methods=["GET"])
 def health_check():
     """
