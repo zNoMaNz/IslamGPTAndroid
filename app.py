@@ -12,13 +12,8 @@ from flask_jwt_extended import (
 from werkzeug.security import generate_password_hash, check_password_hash
 import openai
 
-# Initialize Flask app
-app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
-
-# Load environment variables
-app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "default_secret_key")  # Default for development
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# Ensure logs directory exists
+os.makedirs("logs", exist_ok=True)
 
 # Logging configuration
 logging.basicConfig(
@@ -30,17 +25,22 @@ logging.basicConfig(
     ],
 )
 
-# Simulated in-memory database (replace with actual database for production)
-users = {}
-user_threads = {}
-
-# Ensure logs directory exists
-os.makedirs("logs", exist_ok=True)
-
 # Serve the HTML form at the root URL
 @app.route("/")
 def serve_html():
     return send_from_directory("static", "index.html")
+
+# Initialize Flask app
+app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
+
+# Load environment variables
+app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "default_secret_key")  # Default for development
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+# Simulated in-memory database (replace with actual database for production)
+users = {}
+user_threads = {}
 
 # ---------------------
 # Authentication Routes
