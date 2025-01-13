@@ -24,6 +24,11 @@ if not app.config["JWT_SECRET_KEY"]:
 # Initialize the JWT Manager
 jwt = JWTManager(app)
 
+# Serve the HTML form at the root URL
+@app.route("/")
+def serve_html():
+    return send_from_directory("static", "index.html")
+
 # OpenAI API key from environment variables
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
