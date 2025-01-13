@@ -1,7 +1,7 @@
 import os
 import uuid
-import datetime
-from flask import Flask, request, jsonify
+import logging
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_jwt_extended import (
     JWTManager,
@@ -14,27 +14,18 @@ import openai
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app)  # Enable CORS
+CORS(app)  # Enable CORS for all routes
 
-# Load the JWT_SECRET_KEY from environment variables
-app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
-if not app.config["JWT_SECRET_KEY"]:
-    raise RuntimeError("JWT_SECRET_KEY is not set in environment variables!")
-
-# Initialize the JWT Manager
-jwt = JWTManager(app)
-
-# Serve the HTML form at the root URL
-@app.route("/")
-def serve_html():
-    return send_from_directory("static", "index.html")
-
-# OpenAI API key from environment variables
+# Load environment variables
+app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "default_secret_key")  # Default for dev
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
+# Logging configuration
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
 # Simulated in-memory database (replace with actual database for production)
-users = {}  # Store users: {username: {password: hashed_password}}
-user_threads = {}  # Store threads: {thread_id: {"user": username, "messages": []}}
+users = {}
+user_threads = {}
 
 # Ensure logs directory exists
 os.makedirs("logs", exist_ok=True)
@@ -51,7 +42,7 @@ def register():
     """
     data = request.get_json()
     username = data.get("username")
-    email = data.get("email")  # Handle the email field
+    email = data.get("email")
     password = data.get("password")
 
     if not username or not password:
@@ -60,12 +51,9 @@ def register():
     if username in users:
         return jsonify({"success": False, "error": "Username already exists"}), 409
 
-    # Hash the password for secure storage
-    hashed_password = generate_password_hash(password)
-    users[username] = {"password": hashed_password, "email": email}
-
+    users[username] = {"password": generate_password_hash(password), "email": email}
+    logging.info("User registered: %s", username)
     return jsonify({"success": True, "message": "User registered successfully"}), 201
-
 
 
 @app.route("/login", methods=["POST"])
@@ -77,13 +65,12 @@ def login():
     username = data.get("username")
     password = data.get("password")
 
-    # Validate username and password
     user = users.get(username)
     if not user or not check_password_hash(user["password"], password):
         return jsonify({"error": "Invalid credentials"}), 401
 
-    # Generate a JWT token
     token = create_access_token(identity=username)
+    logging.info("User logged in: %s", username)
     return jsonify({"token": token})
 
 
@@ -100,6 +87,7 @@ def create_thread():
     thread_id = str(uuid.uuid4())
     user = get_jwt_identity()
     user_threads[thread_id] = {"user": user, "messages": []}
+    logging.info("Thread created: %s by user: %s", thread_id, user)
     return jsonify({"thread_id": thread_id})
 
 
@@ -111,6 +99,7 @@ def get_threads():
     """
     user = get_jwt_identity()
     threads = {k: v for k, v in user_threads.items() if v["user"] == user}
+    logging.info("Threads retrieved for user: %s", user)
     return jsonify(list(threads.keys()))
 
 
@@ -128,13 +117,11 @@ def ask():
     thread_id = data.get("thread_id")
     question = data.get("question", "").strip()
 
-    if thread_id not in user_threads:
+    if not thread_id or thread_id not in user_threads:
         return jsonify({"error": "Invalid thread ID"}), 404
 
-    # Add user message to thread
     user_threads[thread_id]["messages"].append({"role": "user", "content": question})
 
-    # Prepare messages for OpenAI
     messages = [{"role": "system", "content": "You are an Islamic assistant."}]
     messages += user_threads[thread_id]["messages"]
 
@@ -145,14 +132,12 @@ def ask():
             temperature=0.7,
         )
         assistant_reply = response.choices[0].message["content"]
-
-        # Add assistant message to thread
         user_threads[thread_id]["messages"].append({"role": "assistant", "content": assistant_reply})
-
+        logging.info("Response generated for thread: %s", thread_id)
         return jsonify({"success": True, "reply": assistant_reply})
-
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        logging.error("Error in OpenAI API call: %s", e)
+        return jsonify({"success": False, "error": "Failed to fetch response from AI"}), 500
 
 
 # ---------------------
