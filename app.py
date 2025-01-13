@@ -46,19 +46,21 @@ def register():
     """
     data = request.get_json()
     username = data.get("username")
+    email = data.get("email")  # Handle the email field
     password = data.get("password")
 
     if not username or not password:
-        return jsonify({"error": "Username and password are required"}), 400
+        return jsonify({"success": False, "error": "Username and password are required"}), 400
 
     if username in users:
-        return jsonify({"error": "Username already exists"}), 409
+        return jsonify({"success": False, "error": "Username already exists"}), 409
 
     # Hash the password for secure storage
     hashed_password = generate_password_hash(password)
-    users[username] = {"password": hashed_password}
+    users[username] = {"password": hashed_password, "email": email}
 
-    return jsonify({"message": "User registered successfully"}), 201
+    return jsonify({"success": True, "message": "User registered successfully"}), 201
+
 
 
 @app.route("/login", methods=["POST"])
