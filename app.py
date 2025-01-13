@@ -20,6 +20,15 @@ CORS(app)  # Enable CORS for all routes
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "default_secret_key")  # Default for development
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
+# Initialize JWT Manager
+jwt = JWTManager()
+jwt.init_app(app)  # Explicitly link the JWTManager to the Flask app
+
+# Serve the HTML form at the root URL
+@app.route("/")
+def serve_html():
+    return send_from_directory("static", "index.html")
+
 # Ensure logs directory exists
 os.makedirs("logs", exist_ok=True)
 
@@ -32,11 +41,6 @@ logging.basicConfig(
         logging.FileHandler("logs/app.log", mode="a", encoding="utf-8"),  # Save logs locally
     ],
 )
-
-# Serve the HTML form at the root URL
-@app.route("/")
-def serve_html():
-    return send_from_directory("static", "index.html")
 
 # Simulated in-memory database (replace with actual database for production)
 users = {}
